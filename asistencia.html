@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Asistencia de Trabajadores</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+
+
+  <style>
+    .calendar {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 5px;
+    }
+    .day {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: center;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .header {
+      font-weight: bold;
+      background-color: #007bff;
+      color: white;
+    }
+    .trabajado { background-color: #28a745; color: white; }
+    .no-trabajado { background-color: #dc3545; color: white; }
+    .pto { background-color: #ffc107; color: black; }
+  </style>
+</head>
+<body class="bg-light">
+  <div class="container py-5">
+    <h2 class="mb-4 text-center">Registro de Asistencia</h2>
+
+    <div class="mb-3">
+      <label for="trabajadorSelect" class="form-label">Selecciona un Trabajador</label>
+      <select id="trabajadorSelect" class="form-select"></select>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <button class="btn btn-outline-primary" onclick="cambiarMes(-1)">← Mes anterior</button>
+      <h4 id="mesActual"></h4>
+      <button class="btn btn-outline-primary" onclick="cambiarMes(1)">Mes siguiente →</button>
+    </div>
+
+    <div id="calendario" class="calendar mb-4"></div>
+
+    <div class="row text-center mb-4">
+      <div class="col">
+        <span class="badge bg-success">Trabajado</span>
+      </div>
+      <div class="col">
+        <span class="badge bg-danger">No trabajado</span>
+      </div>
+      <div class="col">
+        <span class="badge bg-warning text-dark">PTO</span>
+      </div>
+    </div>
+
+    <h5>Resumen</h5>
+    <p>Días Trabajados: <span id="trabajado">0</span></p>
+    <p>No Trabajados: <span id="noTrabajado">0</span></p>
+    <p>Días con PTO: <span id="pto">0</span></p>
+
+    <div class="text-center">
+      <a href="registro.html" class="btn btn-secondary">← Volver al Registro</a>
+      <button class="btn btn-secondary" onclick="generarPDFAsistencia(trabajadorSelect.value)">🖨️ Generar PDF</button>
+
+
+    </div>
+  </div>
+
+  <script>
+    let mes = new Date().getMonth();
+    let anio = new Date().getFullYear();
+    let trabajadores = JSON.parse(localStorage.getItem('trabajadores')) || [];
+    let trabajadorSeleccionado = null;
+
+    const estados = [null,"trabajado", "no-trabajado", "pto"];
+
+    const trabajadorSelect = document.getElementById('trabajadorSelect');
+    const calendarioDiv = document.getElementById('calendario');
+    const mesActual = document.getElementById('mesActual');
+
+    function cargarTrabajadores() {
+      trabajadorSelect.innerHTML = '<option value="">-- Selecciona --</option>';
+      trabajadores.forEach(t => {
+        const option = document.createElement('option');
+        option.value = t.id;
+        option.textContent = `${t.nombre} ${t.apellido}`;
+        trabajadorSelect.appendChild(option);
+      });
+    }
+
+    trabajadorSelect.addEventListener('change', () => {
+      const id = trabajadorSelect.value;
+      trabajadorSeleccionado = trabajadores.find(t => t.id === id);
+      renderCalendario();
+    });
+
+    function cambiarMes(cambio) {
+      mes += cambio;
+      if (mes < 0) {
+        mes = 11;
+        anio--;
+      } else if (mes > 11) {
+        mes = 0;
+        anio++;
+      }
+      renderCalendario();
+    }
+
+    function renderCalendario() {
+      if (!trabajadorSeleccionado) return;
+
+      calendarioDiv.innerHTML = "";
+      mesActual.textContent = `${new Date(anio, mes).toLocaleString("es-ES", { month: 'long' })} ${anio}`;
+
+      const inicio = new Date(anio, mes, 1);
+      const totalDias = new Date(anio, mes + 1, 0).getDate();
+      const diaInicio = inicio.getDay(); // 0 = domingo
+
+      const headers = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+      headers.forEach(h => {
+        const div = document.createElement('div');
+        div.className = "header";
+        div.textContent = h;
+        calendarioDiv.appendChild(div);
+      });
+
+      for (let i = 0; i < diaInicio; i++) {
+        const div = document.createElement('div');
+        calendarioDiv.appendChild(div);
+      }
+
+      let diasTrabajado = 0;
+      let diasNoTrabajado = 0;
+      let diasPTO = 0;
+
+      for (let dia = 1; dia <= totalDias; dia++) {
+        const fecha = `${anio}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+        const estado = trabajadorSeleccionado.asistencia[fecha];
+
+        const div = document.createElement('div');
+        div.className = `day ${estado || ""}`;
+        div.textContent = `${dia}`;
+
+        if (estado === "trabajado") diasTrabajado++;
+        if (estado === "no-trabajado") diasNoTrabajado++;
+        if (estado === "pto") diasPTO++;
+
+        div.onclick = () => {
+  		let actual = trabajadorSeleccionado.asistencia[fecha] || null;
+  		let currentIndex = estados.indexOf(actual);
+  		let nextIndex = (currentIndex + 1) % estados.length;
+ 		let siguienteEstado = estados[nextIndex];
+
+  		if (siguienteEstado === null) {
+   		 delete trabajadorSeleccionado.asistencia[fecha];
+ 		 } else {
+   		 trabajadorSeleccionado.asistencia[fecha] = siguienteEstado;
+ 		 }
+
+ 		guardarAsistencia();
+  		renderCalendario();
+        };
+
+        calendarioDiv.appendChild(div);
+      }
+
+      document.getElementById("trabajado").textContent = diasTrabajado;
+      document.getElementById("noTrabajado").textContent = diasNoTrabajado;
+      document.getElementById("pto").textContent = diasPTO;
+    }
+
+    function guardarAsistencia() {
+      const idx = trabajadores.findIndex(t => t.id === trabajadorSeleccionado.id);
+      trabajadores[idx] = trabajadorSeleccionado;
+      localStorage.setItem('trabajadores', JSON.stringify(trabajadores));
+    }
+
+
+
+function generarPDFAsistencia(trabajadorId) {
+  const trabajador = trabajadores.find(t => t.id === trabajadorId);
+  if (!trabajador) {
+    alert("Selecciona un trabajador válido.");
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('landscape', 'mm', 'letter');
+  const fechaGeneracion = new Date().toLocaleString("es-ES");
+  const nombreMes = new Date(anio, mes).toLocaleString("es-ES", { month: 'long' });
+
+  // Encabezado
+  doc.setFontSize(16);
+  doc.text("Reporte Mensual de Asistencia", 14, 20);
+  doc.setFontSize(11);
+  doc.text(`Generado: ${fechaGeneracion}`, 14, 28);
+  doc.text(`Trabajador: ${trabajador.nombre} ${trabajador.apellido}`, 14, 36);
+  doc.text(`ID: ${trabajador.id} | Dirección: ${trabajador.direccion || "No disponible"}`, 14, 44);
+  doc.text(`Inicio de labores: ${trabajador.fechaInicio || "No disponible"}`, 14, 52);
+  doc.text(`Mes: ${nombreMes.toUpperCase()} ${anio}`, 14, 60);
+
+  // Cabecera de días
+  const diasSemana = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+  const celdaAncho = 35;
+  const celdaAlto = 15;
+  const inicioX = 20;
+  const inicioY = 70;
+
+  doc.setFontSize(10);
+  diasSemana.forEach((dia, i) => {
+    doc.setFillColor(0, 123, 255);
+    doc.setTextColor(255);
+    doc.rect(inicioX + i * celdaAncho, inicioY, celdaAncho, celdaAlto, 'F');
+    doc.text(dia, inicioX + i * celdaAncho + 10, inicioY + 10);
+  });
+
+  // Días del mes con estado
+  const diasMes = new Date(anio, mes + 1, 0).getDate();
+  const primerDia = new Date(anio, mes, 1).getDay(); // 0 = domingo
+
+  let fila = 0;
+  let col = primerDia;
+  let totalTrabajado = 0;
+  let totalNoTrabajado = 0;
+  let totalPTO = 0;
+
+  for (let dia = 1; dia <= diasMes; dia++) {
+    const fecha = `${anio}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+    const estado = trabajador.asistencia[fecha];
+    let simbolo = '';
+    let color = [255, 255, 255]; // blanco por defecto
+    let textoColor = [0, 0, 0];
+
+    switch (estado) {
+      case "trabajado":
+        simbolo = 'Trabajado';
+        color = [40, 167, 69]; // Verde
+        textoColor = [255, 255, 255];
+        totalTrabajado++;
+        break;
+      case "no-trabajado":
+        simbolo = 'No Trabajado';
+        color = [220, 53, 69]; // Rojo
+        textoColor = [255, 255, 255];
+        totalNoTrabajado++;
+        break;
+      case "pto":
+        simbolo = 'PTO';
+        color = [255, 193, 7]; // Amarillo
+        textoColor = [0, 0, 0];
+        totalPTO++;
+        break;
+      default:
+        simbolo = 'No Registrado';
+        color = [200, 200, 200]; // Gris
+        textoColor = [0, 0, 0];
+    }
+
+    const x = inicioX + col * celdaAncho;
+    const y = inicioY + (fila + 1) * celdaAlto;
+
+    // Dibujar celda
+    doc.setFillColor(...color);
+    doc.setTextColor(...textoColor);
+    doc.rect(x, y, celdaAncho, celdaAlto, estado ? 'F' : 'S');
+    doc.text(`${dia}: ${simbolo}`, x + 5, y + 10);
+
+    col++;
+    if (col > 6) {
+      col = 0;
+      fila++;
+    }
+  }
+
+  // Totales
+  const resumenY = inicioY + (fila + 2) * celdaAlto + 10;
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(12);
+  doc.text(`Resumen del mes:`, inicioX, resumenY);
+  doc.setFontSize(11);
+  doc.text(`Días trabajados: ${totalTrabajado}`, inicioX, resumenY + 8);
+  doc.text(`Días no trabajados: ${totalNoTrabajado}`, inicioX, resumenY + 16);
+  doc.text(`Días con PTO: ${totalPTO}`, inicioX, resumenY + 24);
+
+  // Guardar PDF
+  doc.save(`Asistencia_Calendario_${trabajador.nombre}_${trabajador.apellido}.pdf`);
+}
+
+
+
+
+
+
+
+
+    cargarTrabajadores();
+    renderCalendario();
+  </script>
+</body>
+</html>

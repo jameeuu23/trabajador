@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Registro de Trabajadores</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .table td, .table th { vertical-align: middle; }
+  </style>
+</head>
+<body class="bg-light">
+  <div class="container py-5">
+    <h2 class="mb-4 text-center">Gestión de Trabajadores</h2>
+
+    <!-- Formulario -->
+    <form id="formTrabajador" class="card p-4 shadow mb-4">
+      <input type="hidden" id="modoEdicion" value="">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label for="idTrabajador" class="form-label">ID</label>
+          <input type="text" id="idTrabajador" class="form-control" required>
+        </div>
+        <div class="col-md-6">
+          <label for="nombre" class="form-label">Nombre</label>
+          <input type="text" id="nombre" class="form-control" required>
+        </div>
+        <div class="col-md-6">
+          <label for="apellido" class="form-label">Apellido</label>
+          <input type="text" id="apellido" class="form-control" required>
+        </div>
+        <div class="col-md-6">
+          <label for="direccion" class="form-label">Dirección</label>
+          <input type="text" id="direccion" class="form-control">
+        </div>
+        <div class="col-md-6">
+          <label for="fechaInicio" class="form-label">Fecha de Inicio</label>
+          <input type="date" id="fechaInicio" class="form-control" required>
+        </div>
+        <div class="col-md-6 d-flex align-items-end">
+          <button type="submit" class="btn btn-primary w-100">Guardar</button>
+        </div>
+      </div>
+    </form>
+
+    <!-- Tabla -->
+    <div class="card shadow">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Lista de Trabajadores</h5>
+        <div class="table-responsive">
+          <table class="table table-bordered align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Apellido</th>
+                <th>Dirección</th>
+                <th>Fecha de Inicio</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tablaTrabajadores"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="text-center mt-4">
+      <a href="asistencia.html" class="btn btn-secondary">Ir a Asistencia</a>
+      <!-- Botón de exportación de datos (Exportar trabajadores a JSON) -->
+      <button class="btn btn-success" onclick="exportarDatos()">📥 Exportar Datos</button>
+      <!-- Botón de importación de datos (Importar trabajadores desde JSON) -->
+      <label class="btn btn-info mb-0" for="importar-archivo">📤 Importar Datos</label>
+      <input type="file" id="importar-archivo" class="d-none" accept=".json" onchange="importarDatos()">
+  </div>
+
+  <script>
+    let trabajadores = JSON.parse(localStorage.getItem('trabajadores')) || [];
+    const form = document.getElementById('formTrabajador');
+    const tabla = document.getElementById('tablaTrabajadores');
+    const modoEdicion = document.getElementById('modoEdicion');
+
+    function renderTabla() {
+      tabla.innerHTML = '';
+      trabajadores.forEach((t, i) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${t.id}</td>
+          <td>${t.nombre}</td>
+          <td>${t.apellido}</td>
+          <td>${t.direccion}</td>
+          <td>${t.fechaInicio}</td>
+          <td>
+            <button class="btn btn-warning btn-sm me-1" onclick="editarTrabajador(${i})">✏️ Editar</button>
+            <button class="btn btn-danger btn-sm" onclick="eliminarTrabajador(${i})">🗑️ Eliminar</button>
+          </td>
+        `;
+        tabla.appendChild(tr);
+      });
+    }
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+
+      const trabajador = {
+        id: document.getElementById('idTrabajador').value.trim(),
+        nombre: document.getElementById('nombre').value.trim(),
+        apellido: document.getElementById('apellido').value.trim(),
+        direccion: document.getElementById('direccion').value.trim(),
+        fechaInicio: document.getElementById('fechaInicio').value,
+        asistencia: {} // mantener o inicializar
+      };
+
+      if (modoEdicion.value === '') {
+        // nuevo
+        trabajadores.push(trabajador);
+      } else {
+        // edición
+        trabajadores[modoEdicion.value] = {
+          ...trabajadores[modoEdicion.value],
+          ...trabajador
+        };
+        modoEdicion.value = '';
+      }
+
+      localStorage.setItem('trabajadores', JSON.stringify(trabajadores));
+      form.reset();
+      renderTabla();
+    });
+
+    function editarTrabajador(i) {
+      const t = trabajadores[i];
+      document.getElementById('idTrabajador').value = t.id;
+      document.getElementById('nombre').value = t.nombre;
+      document.getElementById('apellido').value = t.apellido;
+      document.getElementById('direccion').value = t.direccion;
+      document.getElementById('fechaInicio').value = t.fechaInicio;
+      modoEdicion.value = i;
+    }
+
+    function eliminarTrabajador(i) {
+      if (confirm('¿Eliminar este trabajador?')) {
+        trabajadores.splice(i, 1);
+        localStorage.setItem('trabajadores', JSON.stringify(trabajadores));
+        renderTabla();
+      }
+    }
+
+
+// Función para exportar los datos de los trabajadores a un archivo JSON
+function exportarDatos() {
+  const data = {
+    trabajadores: trabajadores, // Aquí es donde asumimos que tienes el array de trabajadores
+  };
+
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'trabajadores.json'; // Nombre del archivo exportado
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+
+
+function renderizarTrabajadores() {
+  const tbody = document.getElementById('tablaTrabajadores');
+  tbody.innerHTML = '';
+
+  trabajadores.forEach((t, index) => {
+    const fila = document.createElement('tr');
+    fila.innerHTML = `
+      <td>${t.id}</td>
+      <td>${t.nombre}</td>
+      <td>${t.apellido}</td>
+      <td>${t.direccion || ''}</td>
+      <td>${t.fecha_inicio || ''}</td>
+      <td>
+        <button class="btn btn-warning btn-sm me-1" onclick="editarTrabajador(${index})">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="eliminarTrabajador(${index})">🗑️</button>
+      </td>
+    `;
+    tbody.appendChild(fila);
+  });
+}
+
+
+// Función para importar los datos de los trabajadores desde un archivo JSON
+function importarDatos() {
+  const input = document.getElementById('importar-archivo');
+  const archivo = input.files[0];
+  if (!archivo) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    let datos;
+    try {
+      datos = JSON.parse(e.target.result);
+    } catch (err) {
+      alert("Error al leer el archivo. Asegúrate de que el formato sea correcto.");
+      return;
+    }
+
+    if (datos.trabajadores && Array.isArray(datos.trabajadores)) {
+      trabajadores = datos.trabajadores;
+      localStorage.setItem('trabajadores', JSON.stringify(trabajadores));
+      renderizarTrabajadores();
+      alert("Datos importados con éxito.");
+    } else {
+      alert("El archivo no tiene el formato correcto. Se esperaba un array de 'trabajadores'.");
+    }
+  };
+
+  reader.onerror = function() {
+    alert("Hubo un problema al intentar leer el archivo.");
+  };
+
+  reader.readAsText(archivo);
+}
+
+
+    renderTabla();
+  </script>
+</body>
+</html>
